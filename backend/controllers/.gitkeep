@@ -1,0 +1,13 @@
+// Example controller — replace with your actual logic
+// const ExampleService = require('../services/exampleService');
+//
+// const getAll = async (req, res) => {
+//   try {
+//     const items = await ExampleService.getAll();
+//     res.json(items);
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// };
+//
+// module.exports = { getAll };

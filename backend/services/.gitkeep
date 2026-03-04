@@ -1,0 +1,8 @@
+// Example service — replace with your actual business logic
+// const Example = require('../models/Example');
+//
+// const getAll = async () => {
+//   return await Example.find();
+// };
+//
+// module.exports = { getAll };
