@@ -50,4 +50,58 @@ const allOrders = async () =>
         .populate('merchandise', 'title faculty event')
         .sort('-createdAt');
 
-module.exports = { purchase, myOrders, myUncollectedCount, markCollected, allOrders };
+/**
+ * FIFO Time-Slot Scheduling Algorithm
+ *
+ * 1. Fetch all paid orders (optionally filtered by merchandise).
+ * 2. Sort by createdAt ASC  →  First-In, First-Out order.
+ * 3. Divide into groups of `itemsPerSlot`.
+ * 4. Each group gets a time slot = startDate + (groupIndex × slotDurationMs).
+ * 5. Persist via a single bulkWrite for efficiency.
+ */
+const assignTimeSlots = async ({ startDate, slotDurationMinutes, itemsPerSlot, merchandiseId }) => {
+    if (!startDate) throw new Error('Start date is required');
+    const items = Math.max(1, parseInt(itemsPerSlot) || 1);
+    const duration = Math.max(1, parseInt(slotDurationMinutes) || 30);
+
+    const query = { paymentStatus: 'paid' };
+    if (merchandiseId) query.merchandise = merchandiseId;
+
+    // Step 1 & 2: fetch and sort FIFO
+    const orders = await Order.find(query).sort('createdAt');
+
+    // Step 3 & 4: compute slot for each order
+    const start = new Date(startDate);
+    const slotMs = duration * 60 * 1000;
+
+    const bulkOps = orders.map((order, i) => {
+        const slotIndex = Math.floor(i / items);
+        const slotTime = new Date(start.getTime() + slotIndex * slotMs);
+        return {
+            updateOne: {
+                filter: { _id: order._id },
+                update: { $set: { timeSlot: slotTime } },
+            },
+        };
+    });
+
+    // Step 5: persist
+    if (bulkOps.length > 0) await Order.bulkWrite(bulkOps);
+
+    return Order.find(query)
+        .populate('student', 'name email')
+        .populate('merchandise', 'title faculty event imageUrl')
+        .sort({ timeSlot: 1, createdAt: 1 });
+};
+
+// Return all paid orders (optionally filtered) sorted by timeSlot then createdAt
+const slotOrders = async (merchandiseId) => {
+    const query = { paymentStatus: 'paid' };
+    if (merchandiseId) query.merchandise = merchandiseId;
+    return Order.find(query)
+        .populate('student', 'name email')
+        .populate('merchandise', 'title faculty event imageUrl')
+        .sort({ timeSlot: 1, createdAt: 1 });
+};
+
+module.exports = { purchase, myOrders, myUncollectedCount, markCollected, allOrders, assignTimeSlots, slotOrders };

@@ -14,6 +14,7 @@ import {
   FiCalendar,
   FiEye,
   FiTrash2,
+  FiClock,
 } from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
 import api from "../api/axios";
@@ -608,6 +609,30 @@ export default function MerchandisePage() {
                           {order.paymentReference}
                         </span>
                       </div>
+                      {/* Time slot assigned by admin */}
+                      {order.timeSlot && !order.collected && (
+                        <div className="mt-2 inline-flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-1.5">
+                          <FiClock className="text-indigo-500 text-xs flex-shrink-0" />
+                          <div>
+                            <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wide leading-none">
+                              Your Collection Slot
+                            </p>
+                            <p className="text-xs font-semibold text-indigo-800 mt-0.5">
+                              {new Date(order.timeSlot).toLocaleString(
+                                undefined,
+                                {
+                                  weekday: "short",
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                },
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <div className="flex flex-col items-end gap-2 flex-shrink-0">
                       {!order.collected && order.paymentStatus === "paid" ? (

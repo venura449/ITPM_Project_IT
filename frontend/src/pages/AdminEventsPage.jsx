@@ -16,6 +16,7 @@ import {
   FiImage,
   FiChevronRight,
   FiChevronLeft,
+  FiBarChart2,
 } from "react-icons/fi";
 import api from "../api/axios";
 
@@ -75,6 +76,7 @@ const EMPTY_FORM = {
   location: "",
   imageUrl: "",
   budgetGoal: "",
+  votingEnabled: false,
 };
 
 export default function AdminEventsPage() {
@@ -101,6 +103,17 @@ export default function AdminEventsPage() {
   const [regsTarget, setRegsTarget] = useState(null);
   const [regs, setRegs] = useState([]);
   const [regsLoading, setRegsLoading] = useState(false);
+
+  // Voting manager modal
+  const [votingTarget, setVotingTarget] = useState(null);
+  const [votingData, setVotingData] = useState(null);
+  const [votingLoading, setVotingLoading] = useState(false);
+  const [contestants, setContestants] = useState([]);
+  const [newNum, setNewNum] = useState("");
+  const [newName, setNewName] = useState("");
+  const [votingSaveLoading, setVotingSaveLoading] = useState(false);
+  const [votingActionLoading, setVotingActionLoading] = useState(false);
+  const [votingError, setVotingError] = useState("");
 
   // ── Fetch ────────────────────────────────────────────────
   const fetchEvents = useCallback(async () => {
@@ -150,6 +163,7 @@ export default function AdminEventsPage() {
       location: ev.location || "",
       imageUrl: ev.imageUrl || "",
       budgetGoal: ev.budgetGoal != null ? String(ev.budgetGoal) : "0",
+      votingEnabled: ev.votingEnabled || false,
     });
     setModalPage(1);
     setFormError("");
@@ -189,6 +203,7 @@ export default function AdminEventsPage() {
         location: form.location,
         imageUrl: form.imageUrl,
         budgetGoal: Number(form.budgetGoal),
+        votingEnabled: form.votingEnabled,
       };
       if (editTarget) {
         const { data } = await api.put(`/events/${editTarget._id}`, payload);
@@ -256,6 +271,94 @@ export default function AdminEventsPage() {
       setRegs([]);
     } finally {
       setRegsLoading(false);
+    }
+  };
+
+  // ── Voting manager ───────────────────────────────────────
+  const openVotingManager = async (ev) => {
+    setVotingTarget(ev);
+    setVotingError("");
+    setNewNum("");
+    setNewName("");
+    setVotingLoading(true);
+    try {
+      const { data } = await api.get(`/voting/${ev._id}`);
+      setVotingData(data);
+      setContestants(data?.contestants || []);
+    } catch (_) {
+      setVotingData(null);
+      setContestants([]);
+    } finally {
+      setVotingLoading(false);
+    }
+  };
+
+  const addContestant = () => {
+    if (!newNum || !newName.trim())
+      return setVotingError("Enter both a number and a name.");
+    const num = Number(newNum);
+    if (!Number.isInteger(num) || num < 1)
+      return setVotingError("Number must be a positive integer.");
+    if (contestants.some((c) => c.number === num))
+      return setVotingError("That number is already taken.");
+    setContestants((prev) =>
+      [...prev, { number: num, name: newName.trim() }].sort(
+        (a, b) => a.number - b.number,
+      ),
+    );
+    setNewNum("");
+    setNewName("");
+    setVotingError("");
+  };
+
+  const removeContestant = (num) =>
+    setContestants((prev) => prev.filter((c) => c.number !== num));
+
+  const handleSaveContestants = async () => {
+    if (contestants.length === 0)
+      return setVotingError("Add at least one contestant before saving.");
+    setVotingSaveLoading(true);
+    setVotingError("");
+    try {
+      const { data } = await api.post(`/voting/${votingTarget._id}`, {
+        contestants,
+      });
+      setVotingData((prev) => ({ ...(prev || {}), ...data }));
+      setContestants(data?.contestants || contestants);
+    } catch (err) {
+      setVotingError(
+        err.response?.data?.message ?? "Failed to save contestants.",
+      );
+    } finally {
+      setVotingSaveLoading(false);
+    }
+  };
+
+  const handleOpenVoting = async () => {
+    setVotingActionLoading(true);
+    setVotingError("");
+    try {
+      await api.put(`/voting/${votingTarget._id}/open`);
+      setVotingData((prev) => ({ ...prev, status: "open" }));
+    } catch (err) {
+      setVotingError(err.response?.data?.message ?? "Failed to open voting.");
+    } finally {
+      setVotingActionLoading(false);
+    }
+  };
+
+  const handleCloseVoting = async () => {
+    setVotingActionLoading(true);
+    setVotingError("");
+    try {
+      await api.put(`/voting/${votingTarget._id}/close`);
+      const { data } = await api.get(`/voting/${votingTarget._id}`);
+      setVotingData(data);
+      setContestants(data?.contestants || []);
+    } catch (err) {
+      setVotingError(err.response?.data?.message ?? "Failed to close voting.");
+    } finally {
+      setVotingActionLoading(false);
     }
   };
 
@@ -533,6 +636,15 @@ export default function AdminEventsPage() {
                           >
                             <FiUsers className="text-sm" />
                           </button>
+                          {ev.votingEnabled && (
+                            <button
+                              onClick={() => openVotingManager(ev)}
+                              title="Manage Voting"
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
+                            >
+                              <FiBarChart2 className="text-sm" />
+                            </button>
+                          )}
                           <button
                             onClick={() => handleUnpublish(ev)}
                             title="Unpublish"
@@ -751,6 +863,31 @@ export default function AdminEventsPage() {
                     <p className="text-[10px] text-gray-400 mt-1">
                       Events with an amount &gt; 0 will be visible to sponsors.
                     </p>
+                  </Field>
+                  <Field label="Voting">
+                    <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 transition select-none">
+                      <div
+                        className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${form.votingEnabled ? "bg-indigo-600" : "bg-gray-300"}`}
+                      >
+                        <div
+                          className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.votingEnabled ? "translate-x-5" : "translate-x-0"}`}
+                        />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-700">Enable Voting</p>
+                        <p className="text-[10px] text-gray-400">
+                          Allow participants to vote for contestants once published
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={form.votingEnabled}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, votingEnabled: e.target.checked }))
+                        }
+                        className="sr-only"
+                      />
+                    </label>
                   </Field>
                   {editTarget && (
                     <Field label="Status">
@@ -995,6 +1132,240 @@ export default function AdminEventsPage() {
                 {deleteLoading ? "Deleting…" : "Delete"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Voting Manager Modal ── */}
+      {votingTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4 backdrop-blur-sm"
+          style={{ background: "rgba(0,0,0,0.45)" }}
+          onClick={() =>
+            !votingSaveLoading &&
+            !votingActionLoading &&
+            setVotingTarget(null)
+          }
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-indigo-900 to-indigo-700 px-6 py-4 flex items-center justify-between">
+              <div>
+                <p className="text-white font-bold text-sm">Manage Voting</p>
+                <p className="text-indigo-300 text-xs mt-0.5 truncate max-w-[320px]">
+                  {votingTarget.title}
+                </p>
+              </div>
+              <button
+                onClick={() => setVotingTarget(null)}
+                className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-white/10 transition"
+              >
+                <FiX />
+              </button>
+            </div>
+
+            {votingLoading ? (
+              <div className="flex justify-center py-12">
+                <span className="w-6 h-6 border-2 border-gray-200 border-t-indigo-600 rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="px-6 py-5 space-y-4 max-h-[72vh] overflow-y-auto">
+                {/* Status */}
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                      !votingData
+                        ? "bg-gray-50 text-gray-500 border-gray-200"
+                        : votingData.status === "open"
+                          ? "bg-green-50 text-green-700 border-green-200"
+                          : votingData.status === "closed"
+                            ? "bg-red-50 text-red-600 border-red-200"
+                            : "bg-amber-50 text-amber-700 border-amber-200"
+                    }`}
+                  >
+                    {!votingData
+                      ? "Not Configured"
+                      : votingData.status === "open"
+                        ? "● Voting Open"
+                        : votingData.status === "closed"
+                          ? "● Voting Closed"
+                          : "● Draft"}
+                  </span>
+                  {(votingData?.status === "open" ||
+                    votingData?.status === "closed") && (
+                    <span className="text-xs text-gray-400">
+                      {votingData.totalVotes ?? 0} vote
+                      {(votingData.totalVotes ?? 0) !== 1 ? "s" : ""} cast
+                    </span>
+                  )}
+                </div>
+
+                {/* Add contestant — draft only */}
+                {(!votingData || votingData.status === "draft") && (
+                  <div>
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">
+                      Add Contestant
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        value={newNum}
+                        onChange={(e) => {
+                          setNewNum(e.target.value);
+                          setVotingError("");
+                        }}
+                        placeholder="#"
+                        min="1"
+                        className="w-16 px-2 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                      />
+                      <input
+                        type="text"
+                        value={newName}
+                        onChange={(e) => {
+                          setNewName(e.target.value);
+                          setVotingError("");
+                        }}
+                        placeholder="Contestant name…"
+                        className="flex-1 px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                        onKeyDown={(e) =>
+                          e.key === "Enter" &&
+                          (e.preventDefault(), addContestant())
+                        }
+                      />
+                      <button
+                        onClick={addContestant}
+                        className="px-3 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-bold transition flex items-center gap-1 shadow-sm"
+                      >
+                        <FiPlus /> Add
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Contestants list */}
+                {contestants.length > 0 ? (
+                  <div>
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">
+                      Contestants ({contestants.length})
+                    </p>
+                    <div className="space-y-2">
+                      {contestants.map((c) => {
+                        const maxVotes = Math.max(
+                          ...contestants.map((x) => x.votes || 0),
+                        );
+                        const isWinner =
+                          votingData?.status === "closed" &&
+                          (c.votes || 0) === maxVotes &&
+                          maxVotes > 0;
+                        return (
+                          <div
+                            key={c.number}
+                            className={`flex items-center gap-3 p-2.5 rounded-xl border ${isWinner ? "bg-yellow-50 border-yellow-200" : "bg-gray-50 border-gray-100"}`}
+                          >
+                            <span
+                              className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-extrabold flex-shrink-0 ${isWinner ? "bg-yellow-400 text-white" : "bg-indigo-100 text-indigo-700"}`}
+                            >
+                              {c.number}
+                            </span>
+                            <span className="flex-1 text-sm font-semibold text-gray-800">
+                              {c.name}
+                            </span>
+                            {(votingData?.status === "open" ||
+                              votingData?.status === "closed") && (
+                              <span className="text-xs font-bold text-gray-600">
+                                {c.votes || 0} vote
+                                {(c.votes || 0) !== 1 ? "s" : ""}
+                                {isWinner && (
+                                  <span className="ml-1 text-yellow-500">
+                                    🏆
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                            {(!votingData ||
+                              votingData.status === "draft") && (
+                              <button
+                                onClick={() => removeContestant(c.number)}
+                                className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
+                              >
+                                <FiX className="text-xs" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  !votingLoading && (
+                    <p className="text-sm text-gray-400 text-center py-3">
+                      No contestants added yet
+                    </p>
+                  )
+                )}
+
+                {/* Error */}
+                {votingError && (
+                  <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3.5 py-2.5 border border-red-100">
+                    {votingError}
+                  </p>
+                )}
+
+                {/* Action buttons */}
+                <div className="flex gap-2 pt-1 flex-wrap">
+                  {(!votingData || votingData?.status === "draft") && (
+                    <>
+                      <button
+                        onClick={handleSaveContestants}
+                        disabled={
+                          votingSaveLoading || contestants.length === 0
+                        }
+                        className="flex-1 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+                      >
+                        {votingSaveLoading ? (
+                          <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <FiSave className="text-xs" />
+                        )}
+                        {votingSaveLoading ? "Saving…" : "Save Contestants"}
+                      </button>
+                      {votingData?.status === "draft" &&
+                        contestants.length >= 2 && (
+                          <button
+                            onClick={handleOpenVoting}
+                            disabled={votingActionLoading}
+                            className="flex-1 py-2.5 rounded-xl bg-green-700 hover:bg-green-600 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+                          >
+                            {votingActionLoading ? (
+                              <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                            ) : (
+                              "▶"
+                            )}
+                            {votingActionLoading ? "…" : "Open Voting"}
+                          </button>
+                        )}
+                    </>
+                  )}
+                  {votingData?.status === "open" && (
+                    <button
+                      onClick={handleCloseVoting}
+                      disabled={votingActionLoading}
+                      className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+                    >
+                      {votingActionLoading ? (
+                        <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        "■"
+                      )}
+                      {votingActionLoading ? "…" : "Close Voting"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

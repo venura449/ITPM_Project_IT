@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FiHome,
@@ -20,11 +20,20 @@ import {
   FiEyeOff,
   FiSave,
   FiMail,
+  FiAward,
+  FiClock,
+  FiCheckCircle,
+  FiAlertCircle,
+  FiPackage,
+  FiStar,
+  FiTrendingUp,
+  FiArrowRight,
 } from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
 import api from "../api/axios";
 import MerchandisePage from "./MerchandisePage";
 import EventsPage from "./EventsPage";
+import OCApplicationPage from "./OCApplicationPage";
 
 const roleColors = {
   admin: "bg-red-100 text-red-700",
@@ -41,47 +50,84 @@ const navItems = [
   { icon: FiHome, label: "Dashboard", id: "dashboard" },
   { icon: FiShoppingBag, label: "Merchandise", id: "merchandise" },
   { icon: FiCalendar, label: "Events", id: "events" },
-  { icon: FiUsers, label: "Students", id: "students" },
-  { icon: FiDollarSign, label: "Sponsors", id: "sponsors" },
-  { icon: FiUser, label: "My Profile", id: "profile" },
+  { icon: FiAward, label: "Apply for OC", id: "oc-apply" },
 ];
 
 const moduleCards = [
   {
     icon: FiShoppingBag,
     title: "Merchandise",
-    desc: "Browse & manage event items",
+    desc: "Browse & order event items",
     color: "bg-purple-50 text-purple-600",
     border: "hover:border-purple-200",
+    id: "merchandise",
   },
   {
     icon: FiCalendar,
     title: "Events",
-    desc: "Explore & approve events",
+    desc: "Explore upcoming events",
     color: "bg-blue-50 text-blue-600",
     border: "hover:border-blue-200",
+    id: "events",
   },
   {
-    icon: FiUsers,
-    title: "Students",
-    desc: "OC recommendations & roles",
+    icon: FiAward,
+    title: "Apply for OC",
+    desc: "Join the organising committee",
     color: "bg-amber-50 text-amber-600",
     border: "hover:border-amber-200",
-  },
-  {
-    icon: FiDollarSign,
-    title: "Sponsors",
-    desc: "Matching & outreach system",
-    color: "bg-green-50 text-green-700",
-    border: "hover:border-green-200",
+    id: "oc-apply",
   },
 ];
+
+// ── Mini score bar ────────────────────────────────────────────
+function ScoreMiniBar({ value, max, color }) {
+  const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  return (
+    <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden flex-1">
+      <div
+        className={`h-full rounded-full ${color}`}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [active, setActive] = useState("dashboard");
+
+  // ── Dashboard data ─────────────────────────────────────────
+  const [dashData, setDashData] = useState(null);
+  const [dashLoading, setDashLoading] = useState(true);
+
+  const fetchDashData = useCallback(async () => {
+    setDashLoading(true);
+    try {
+      const [ordersRes, scoreRes, appsRes, eventsRes] =
+        await Promise.allSettled([
+          api.get("/orders/my"),
+          api.get("/oc-applications/my-score"),
+          api.get("/oc-applications/my"),
+          api.get("/events"),
+        ]);
+      setDashData({
+        orders: ordersRes.status === "fulfilled" ? ordersRes.value.data : [],
+        score: scoreRes.status === "fulfilled" ? scoreRes.value.data : null,
+        apps: appsRes.status === "fulfilled" ? appsRes.value.data : [],
+        events: eventsRes.status === "fulfilled" ? eventsRes.value.data : [],
+      });
+    } catch (_) {
+    } finally {
+      setDashLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (active === "dashboard") fetchDashData();
+  }, [active, fetchDashData]);
   // ── Profile modal state ────────────────────────────────────
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [modalPage, setModalPage] = useState(1); // 1 = profile info, 2 = change password
@@ -341,110 +387,429 @@ export default function Dashboard() {
             <MerchandisePage />
           ) : active === "events" ? (
             <EventsPage />
+          ) : active === "oc-apply" ? (
+            <OCApplicationPage />
           ) : (
-            <div className="p-6">
-              {/* Welcome banner */}
-              <div className="bg-gradient-to-r from-green-900 to-green-700 rounded-2xl p-6 mb-6 flex items-center justify-between overflow-hidden relative">
-                <div className="absolute -top-8 -right-8 w-40 h-40 bg-white/10 rounded-full" />
-                <div className="absolute -bottom-10 right-24 w-28 h-28 bg-white/10 rounded-full" />
+            /* ══════════════ DASHBOARD HOME ══════════════ */
+            <div className="p-6 space-y-6">
+              {/* ── Hero banner ─────────────────────────────── */}
+              <div className="bg-gradient-to-r from-green-900 via-green-800 to-green-700 rounded-2xl p-6 flex items-center justify-between overflow-hidden relative">
+                <div className="absolute -top-8 -right-8 w-44 h-44 bg-white/10 rounded-full pointer-events-none" />
+                <div className="absolute -bottom-10 right-28 w-32 h-32 bg-white/10 rounded-full pointer-events-none" />
                 <div className="relative">
-                  <p className="text-green-200 text-sm font-medium mb-1">
+                  <p className="text-green-300 text-sm font-medium mb-1">
                     Welcome back 👋
                   </p>
                   <h2 className="text-white text-2xl font-extrabold leading-tight">
                     {user?.name}
                   </h2>
-                  <div
-                    className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${roleColors[user?.role] ?? "bg-green-100 text-green-700"}`}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                    {roleLabels[user?.role] ?? user?.role}
+                  <p className="text-green-300 text-xs mt-1">{user?.email}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/20 text-green-100">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-300" />
+                      Participant
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/20 text-green-100">
+                      <FiClock className="text-xs" />
+                      Member since{" "}
+                      {user?.createdAt
+                        ? new Date(user.createdAt).toLocaleDateString(
+                            undefined,
+                            { month: "short", year: "numeric" },
+                          )
+                        : "—"}
+                    </span>
                   </div>
                 </div>
-                <div className="relative hidden sm:flex w-16 h-16 bg-white/20 rounded-2xl items-center justify-center text-4xl flex-shrink-0">
-                  🎓
+                <div className="relative hidden sm:flex w-20 h-20 bg-white/20 rounded-2xl items-center justify-center text-white font-extrabold text-3xl flex-shrink-0 ring-2 ring-white/20">
+                  {user?.name?.[0]?.toUpperCase() ?? "U"}
                 </div>
               </div>
 
-              {/* Stats row */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                {[
-                  {
-                    label: "Events",
-                    value: "12",
-                    sub: "3 upcoming",
-                    Icon: FiCalendar,
-                    color: "text-blue-600 bg-blue-50",
-                  },
-                  {
-                    label: "Merchandise",
-                    value: "48",
-                    sub: "Items available",
-                    Icon: FiShoppingBag,
-                    color: "text-purple-600 bg-purple-50",
-                  },
-                  {
-                    label: "Students",
-                    value: "320",
-                    sub: "Registered",
-                    Icon: FiUsers,
-                    color: "text-amber-600 bg-amber-50",
-                  },
-                  {
-                    label: "Sponsors",
-                    value: "9",
-                    sub: "Active partners",
-                    Icon: FiDollarSign,
-                    color: "text-green-700 bg-green-50",
-                  },
-                ].map(({ label, value, sub, Icon, color }) => (
-                  <div
-                    key={label}
-                    className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm"
-                  >
-                    <div
-                      className={`inline-flex items-center justify-center w-10 h-10 rounded-xl mb-3 text-lg ${color}`}
-                    >
-                      <Icon />
-                    </div>
-                    <p className="text-2xl font-extrabold text-gray-900">
-                      {value}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
-                    <p className="text-xs font-semibold text-gray-500 mt-1">
-                      {label}
-                    </p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Module cards */}
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-                Modules
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                {moduleCards.map(
-                  ({ icon: Icon, title, desc, color, border }) => (
-                    <button
-                      key={title}
-                      onClick={() => setActive(title.toLowerCase())}
-                      className={`text-left bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md ${border} hover:border transition-all duration-200 group`}
-                    >
-                      <div
-                        className={`inline-flex items-center justify-center w-11 h-11 rounded-xl mb-4 text-xl ${color}`}
-                      >
-                        <Icon />
+              {dashLoading ? (
+                <div className="flex items-center justify-center py-16 text-gray-400 gap-3">
+                  <span className="w-6 h-6 border-2 border-gray-200 border-t-green-700 rounded-full animate-spin" />
+                  Loading your dashboard…
+                </div>
+              ) : (
+                <>
+                  {/* ── Uncollected order alert ──────────────── */}
+                  {(() => {
+                    const uncollected = (dashData?.orders ?? []).filter(
+                      (o) => o.paymentStatus === "paid" && !o.collected,
+                    );
+                    return uncollected.length > 0 ? (
+                      <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3 flex items-center gap-3">
+                        <FiAlertCircle className="text-amber-500 text-xl flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-amber-800">
+                            {uncollected.length} item
+                            {uncollected.length > 1 ? "s" : ""} awaiting
+                            collection
+                          </p>
+                          <p className="text-xs text-amber-600 mt-0.5">
+                            Visit the merchandise booth to collect your item(s).
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setActive("merchandise")}
+                          className="text-xs font-semibold text-amber-700 hover:text-amber-900 underline flex-shrink-0"
+                        >
+                          View orders
+                        </button>
                       </div>
-                      <p className="font-bold text-gray-900 text-sm mb-1">
-                        {title}
-                      </p>
-                      <p className="text-xs text-gray-400 leading-relaxed">
-                        {desc}
-                      </p>
-                    </button>
-                  ),
-                )}
-              </div>
+                    ) : null;
+                  })()}
+
+                  {/* ── Stats row ───────────────────────────── */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {[
+                      {
+                        label: "My Orders",
+                        value: dashData?.orders?.length ?? 0,
+                        sub: `${(dashData?.orders ?? []).filter((o) => o.collected).length} collected`,
+                        icon: FiShoppingBag,
+                        color: "text-purple-600 bg-purple-50",
+                      },
+                      {
+                        label: "Events",
+                        value: dashData?.events?.length ?? 0,
+                        sub: "published events",
+                        icon: FiCalendar,
+                        color: "text-blue-600 bg-blue-50",
+                      },
+                      {
+                        label: "Engagement",
+                        value: dashData?.score?.total ?? 0,
+                        sub: "activity pts",
+                        icon: FiTrendingUp,
+                        color: "text-amber-600 bg-amber-50",
+                      },
+                      {
+                        label: "OC Applications",
+                        value: dashData?.apps?.length ?? 0,
+                        sub: `${(dashData?.apps ?? []).filter((a) => a.status === "accepted").length} accepted`,
+                        icon: FiAward,
+                        color: "text-green-700 bg-green-50",
+                      },
+                    ].map(({ label, value, sub, icon: Icon, color }) => (
+                      <div
+                        key={label}
+                        className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm"
+                      >
+                        <div
+                          className={`inline-flex items-center justify-center w-10 h-10 rounded-xl mb-3 text-lg ${color}`}
+                        >
+                          <Icon />
+                        </div>
+                        <p className="text-2xl font-extrabold text-gray-900">
+                          {value}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
+                        <p className="text-xs font-semibold text-gray-500 mt-1">
+                          {label}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Two-column: Profile stats + Recent orders ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                    {/* Profile engagement card */}
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <p className="text-sm font-bold text-gray-900">
+                          Engagement Score
+                        </p>
+                        {dashData?.score?.suggested && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2.5 py-1">
+                            <FiStar className="text-xs" /> OC Recommended
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Big score */}
+                      <div className="flex items-center gap-4 mb-5">
+                        <div
+                          className={`w-16 h-16 rounded-2xl flex flex-col items-center justify-center flex-shrink-0 ${dashData?.score?.suggested ? "bg-gradient-to-br from-amber-400 to-amber-500" : "bg-gradient-to-br from-green-800 to-green-600"}`}
+                        >
+                          <FiAward className="text-white text-lg mb-0.5" />
+                          <span className="text-white font-extrabold text-lg leading-none">
+                            {dashData?.score?.total ?? 0}
+                          </span>
+                        </div>
+                        <div className="flex-1 space-y-2.5">
+                          {/* Account age */}
+                          <div className="flex items-center gap-2">
+                            <FiUser className="text-blue-500 text-xs flex-shrink-0 w-3" />
+                            <span className="text-[11px] text-gray-500 w-20 flex-shrink-0">
+                              Account Age
+                            </span>
+                            <ScoreMiniBar
+                              value={dashData?.score?.accountAgeScore ?? 0}
+                              max={50}
+                              color="bg-blue-400"
+                            />
+                            <span className="text-[11px] font-bold text-gray-500 w-8 text-right">
+                              {dashData?.score?.accountAgeScore ?? 0}
+                            </span>
+                          </div>
+                          {/* Merchandise */}
+                          <div className="flex items-center gap-2">
+                            <FiShoppingBag className="text-purple-500 text-xs flex-shrink-0 w-3" />
+                            <span className="text-[11px] text-gray-500 w-20 flex-shrink-0">
+                              Purchases
+                            </span>
+                            <ScoreMiniBar
+                              value={dashData?.score?.merchandiseScore ?? 0}
+                              max={Math.max(
+                                dashData?.score?.merchandiseScore ?? 0,
+                                60,
+                              )}
+                              color="bg-purple-400"
+                            />
+                            <span className="text-[11px] font-bold text-gray-500 w-8 text-right">
+                              {dashData?.score?.merchandiseScore ?? 0}
+                            </span>
+                          </div>
+                          {/* Login streak */}
+                          <div className="flex items-center gap-2">
+                            <FiClock className="text-green-600 text-xs flex-shrink-0 w-3" />
+                            <span className="text-[11px] text-gray-500 w-20 flex-shrink-0">
+                              Login Streak
+                            </span>
+                            <ScoreMiniBar
+                              value={dashData?.score?.loginStreakScore ?? 0}
+                              max={90}
+                              color="bg-green-500"
+                            />
+                            <span className="text-[11px] font-bold text-gray-500 w-8 text-right">
+                              {dashData?.score?.loginStreakScore ?? 0}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Profile detail grid */}
+                      <div className="grid grid-cols-3 gap-3 pt-4 border-t border-gray-100">
+                        {[
+                          {
+                            label: "Days Active",
+                            value: dashData?.score?.daysSinceJoin ?? 0,
+                            icon: FiCalendar,
+                            color: "text-blue-600",
+                          },
+                          {
+                            label: "Login Streak",
+                            value: `${dashData?.score?.loginStreak ?? 0}d`,
+                            icon: FiClock,
+                            color: "text-green-600",
+                          },
+                          {
+                            label: "Orders Made",
+                            value: dashData?.score?.orderCount ?? 0,
+                            icon: FiPackage,
+                            color: "text-purple-600",
+                          },
+                        ].map(({ label, value, icon: Icon, color }) => (
+                          <div key={label} className="text-center py-2">
+                            <Icon className={`text-lg mx-auto mb-1 ${color}`} />
+                            <p className="text-base font-extrabold text-gray-900">
+                              {value}
+                            </p>
+                            <p className="text-[10px] text-gray-400 font-medium">
+                              {label}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={() => setActive("oc-apply")}
+                        className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-green-200 text-green-800 text-sm font-semibold hover:bg-green-50 transition"
+                      >
+                        <FiAward className="text-sm" /> View OC Application
+                        <FiArrowRight className="text-xs ml-auto" />
+                      </button>
+                    </div>
+
+                    {/* Recent orders */}
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <p className="text-sm font-bold text-gray-900">
+                          Recent Orders
+                        </p>
+                        <button
+                          onClick={() => setActive("merchandise")}
+                          className="text-xs font-semibold text-green-700 hover:text-green-900 flex items-center gap-1"
+                        >
+                          View all <FiArrowRight className="text-xs" />
+                        </button>
+                      </div>
+
+                      {(dashData?.orders ?? []).length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+                          <FiShoppingBag className="text-4xl mb-2 opacity-30" />
+                          <p className="text-xs font-medium">No orders yet</p>
+                          <button
+                            onClick={() => setActive("merchandise")}
+                            className="mt-3 text-xs text-green-700 font-semibold underline"
+                          >
+                            Browse merchandise
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {(dashData?.orders ?? []).slice(0, 4).map((order) => (
+                            <div
+                              key={order._id}
+                              className={`flex items-center gap-3 p-3 rounded-xl border ${!order.collected && order.paymentStatus === "paid" ? "border-amber-200 bg-amber-50/30" : "border-gray-100 bg-gray-50/50"}`}
+                            >
+                              <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                {order.merchandise?.imageUrl ? (
+                                  <img
+                                    src={order.merchandise.imageUrl}
+                                    alt=""
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <FiPackage className="text-gray-400" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-gray-900 leading-none line-clamp-1">
+                                  {order.merchandise?.title ?? "Item"}
+                                </p>
+                                <p className="text-[11px] text-gray-400 mt-0.5">
+                                  Size {order.size} · Qty {order.quantity}
+                                </p>
+                                {order.timeSlot && !order.collected && (
+                                  <p className="text-[10px] text-indigo-600 font-semibold mt-0.5 flex items-center gap-1">
+                                    <FiClock className="text-[10px]" />
+                                    Slot:{" "}
+                                    {new Date(order.timeSlot).toLocaleString(
+                                      undefined,
+                                      {
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      },
+                                    )}
+                                  </p>
+                                )}
+                              </div>
+                              {order.collected ? (
+                                <span className="flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5 flex-shrink-0">
+                                  <FiCheckCircle className="text-xs" /> Done
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 flex-shrink-0">
+                                  <FiAlertCircle className="text-xs" /> Pending
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── OC Applications summary ──────────────── */}
+                  {(dashData?.apps ?? []).length > 0 && (
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <p className="text-sm font-bold text-gray-900">
+                          My OC Applications
+                        </p>
+                        <button
+                          onClick={() => setActive("oc-apply")}
+                          className="text-xs font-semibold text-green-700 hover:text-green-900 flex items-center gap-1"
+                        >
+                          Manage <FiArrowRight className="text-xs" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {(dashData?.apps ?? []).slice(0, 3).map((app) => {
+                          const statusCfg = {
+                            pending: {
+                              cls: "text-amber-600 bg-amber-50 border-amber-200",
+                              label: "Under Review",
+                            },
+                            accepted: {
+                              cls: "text-green-700 bg-green-50 border-green-200",
+                              label: "Accepted",
+                            },
+                            rejected: {
+                              cls: "text-red-600   bg-red-50   border-red-200",
+                              label: "Rejected",
+                            },
+                          }[app.status] ?? {
+                            cls: "text-gray-500 bg-gray-50 border-gray-200",
+                            label: app.status,
+                          };
+                          return (
+                            <div
+                              key={app._id}
+                              className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50/50"
+                            >
+                              <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
+                                <FiCalendar className="text-green-700 text-sm" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-gray-900 line-clamp-1">
+                                  {app.eventName}
+                                </p>
+                                <p className="text-[11px] text-gray-400 mt-0.5">
+                                  {app.score} pts
+                                </p>
+                              </div>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${statusCfg.cls}`}
+                              >
+                                {statusCfg.label}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Quick access cards ───────────────────── */}
+                  <div>
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">
+                      Quick Access
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {moduleCards.map(
+                        ({ icon: Icon, title, desc, color, border, id }) => (
+                          <button
+                            key={id}
+                            onClick={() => setActive(id)}
+                            className={`text-left bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md ${border} hover:border transition-all duration-200 group`}
+                          >
+                            <div
+                              className={`inline-flex items-center justify-center w-11 h-11 rounded-xl mb-4 text-xl ${color}`}
+                            >
+                              <Icon />
+                            </div>
+                            <p className="font-bold text-gray-900 text-sm mb-1">
+                              {title}
+                            </p>
+                            <p className="text-xs text-gray-400 leading-relaxed">
+                              {desc}
+                            </p>
+                            <div className="flex items-center gap-1 mt-3 text-xs font-semibold text-gray-400 group-hover:text-green-700 transition">
+                              Go <FiArrowRight className="text-xs" />
+                            </div>
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </main>

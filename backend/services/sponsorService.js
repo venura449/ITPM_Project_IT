@@ -11,10 +11,24 @@ const createSponsor = async ({ name, email, password, company, website, descript
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) throw new Error('A user with this email already exists');
     const user = await User.create({ name, email, password, role: 'sponsor' });
+    const cats = categories || [];
     const sponsor = await Sponsor.create({
         user: user._id, company, website: website || '', description: description || '',
-        categories: categories || [], donationBudget: donationBudget || 0,
+        categories: cats, donationBudget: donationBudget || 0,
     });
+    // Auto-invite sponsor to all published events with a matching category and budget
+    if (cats.length > 0) {
+        const matchingEvents = await Event.find({
+            status: 'published',
+            budgetGoal: { $gt: 0 },
+            category: { $in: cats },
+        }).lean();
+        for (const ev of matchingEvents) {
+            try {
+                await SponsorInvitation.create({ event: ev._id, sponsorUser: user._id });
+            } catch (_) { /* duplicate — skip */ }
+        }
+    }
     return { user, sponsor };
 };
 
@@ -155,9 +169,41 @@ const getAllDonations = async () =>
         .populate('event', 'title date faculty category budgetGoal')
         .sort('-createdAt');
 
+// Allow a sponsor to self-initiate (creates or auto-accepts an invitation)
+const selfInvite = async (userId, eventId) => {
+    const ev = await Event.findById(eventId);
+    if (!ev) throw new Error('Event not found');
+    if (!ev.budgetGoal || ev.budgetGoal <= 0) throw new Error('This event has no sponsor budget');
+    let inv = await SponsorInvitation.findOne({ sponsorUser: userId, event: eventId });
+    if (!inv) {
+        inv = await SponsorInvitation.create({
+            event: eventId,
+            sponsorUser: userId,
+            status: 'accepted',
+            respondedAt: new Date(),
+        });
+    } else if (inv.status !== 'accepted') {
+        inv.status = 'accepted';
+        inv.respondedAt = new Date();
+        await inv.save();
+    }
+    return inv;
+};
+
+// Returns map of { eventId: totalRaised } for all events
+const getEventTotals = async () => {
+    const agg = await Donation.aggregate([
+        { $group: { _id: '$event', total: { $sum: '$amount' } } },
+    ]);
+    const result = {};
+    agg.forEach(({ _id, total }) => { result[String(_id)] = total; });
+    return result;
+};
+
 module.exports = {
     createSponsor, getAll, getById, getBySponsorUserId, update, remove,
     matchEventToSponsors, autoMatchAll,
     getAllInvitations, getInvitationsForSponsor, respondToInvitation,
     donate, getDonationsForEvent, getMyDonations, getAllDonations,
+    selfInvite, getEventTotals,
 };

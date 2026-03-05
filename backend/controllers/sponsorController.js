@@ -48,3 +48,9 @@ exports.getAllDonations = async (req, res) => {
 exports.getMyProfile = async (req, res) => {
     try { ok(res, await svc.getBySponsorUserId(req.user._id)); } catch (e) { fail(res, e); }
 };
+exports.selfInvite = async (req, res) => {
+    try { ok(res, await svc.selfInvite(req.user._id, req.params.eventId), 201); } catch (e) { fail(res, e); }
+};
+exports.getEventTotals = async (req, res) => {
+    try { ok(res, await svc.getEventTotals()); } catch (e) { fail(res, e); }
+};

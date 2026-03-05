@@ -21,6 +21,8 @@ const orderRoutes = require('./routes/orderRoutes');
 const userRoutes = require('./routes/userRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const sponsorRoutes = require('./routes/sponsorRoutes');
+const votingRoutes = require('./routes/votingRoutes');
+const ocApplicationRoutes = require('./routes/ocApplicationRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/merchandise', merchandiseRoutes);
@@ -28,6 +30,8 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/sponsors', sponsorRoutes);
+app.use('/api/voting', votingRoutes);
+app.use('/api/oc-applications', ocApplicationRoutes);
 
 app.get('/', (req, res) => {
   res.json({ message: 'API is running' });

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FiHome,
@@ -21,6 +21,14 @@ import {
   FiX,
   FiUser,
   FiShield,
+  FiClock,
+  FiAward,
+  FiPackage,
+  FiCheckCircle,
+  FiAlertCircle,
+  FiArrowRight,
+  FiTrendingUp,
+  FiStar,
 } from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
 import api from "../api/axios";
@@ -28,6 +36,8 @@ import AdminMerchandisePage from "./AdminMerchandisePage";
 import AdminUsersPage from "./AdminUsersPage";
 import AdminEventsPage from "./AdminEventsPage";
 import AdminSponsorsPage from "./AdminSponsorsPage";
+import AdminOrderSlotsPage from "./AdminOrderSlotsPage";
+import AdminOCApplicationsPage from "./AdminOCApplicationsPage";
 
 const roleLabels = {
   admin: "Administrator",
@@ -38,16 +48,47 @@ const roleLabels = {
 const navItems = [
   { icon: FiHome, label: "Overview", id: "overview" },
   { icon: FiShoppingBag, label: "Merchandise", id: "merchandise" },
+  { icon: FiClock, label: "Collection Slots", id: "slots" },
   { icon: FiCalendar, label: "Events", id: "events" },
   { icon: FiUsers, label: "Users", id: "users" },
   { icon: FiDollarSign, label: "Sponsors", id: "sponsors" },
+  { icon: FiAward, label: "OC Applications", id: "oc-apps" },
 ];
 
 export default function AdminDashboard() {
   const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
-  const [active, setActive] = useState("merchandise"); // admin lands on merchandise by default
+  const [active, setActive] = useState("overview"); // admin lands on overview by default
+
+  // ── Overview data ────────────────────────────────────────
+  const [overviewData, setOverviewData] = useState(null);
+  const [overviewLoading, setOverviewLoading] = useState(true);
+
+  const fetchOverview = useCallback(async () => {
+    setOverviewLoading(true);
+    try {
+      const [usersRes, merchRes, eventsRes, ocRes] = await Promise.allSettled([
+        api.get("/users"),
+        api.get("/merchandise"),
+        api.get("/events"),
+        api.get("/oc-applications"),
+      ]);
+      const users = usersRes.status === "fulfilled" ? usersRes.value.data : [];
+      const merch = merchRes.status === "fulfilled" ? merchRes.value.data : [];
+      const events =
+        eventsRes.status === "fulfilled" ? eventsRes.value.data : [];
+      const ocApps = ocRes.status === "fulfilled" ? ocRes.value.data : [];
+      setOverviewData({ users, merch, events, ocApps });
+    } catch (_) {
+    } finally {
+      setOverviewLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (active === "overview") fetchOverview();
+  }, [active, fetchOverview]);
 
   // ── Profile modal ────────────────────────────────────────
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -279,6 +320,10 @@ export default function AdminDashboard() {
         <main className="flex-1 overflow-y-auto flex flex-col">
           {active === "merchandise" ? (
             <AdminMerchandisePage />
+          ) : active === "slots" ? (
+            <AdminOrderSlotsPage />
+          ) : active === "oc-apps" ? (
+            <AdminOCApplicationsPage />
           ) : active === "users" ? (
             <AdminUsersPage />
           ) : active === "events" ? (
@@ -286,85 +331,441 @@ export default function AdminDashboard() {
           ) : active === "sponsors" ? (
             <AdminSponsorsPage />
           ) : (
-            <div className="p-6">
-              {/* Admin overview banner */}
-              <div className="bg-gradient-to-r from-green-900 to-green-700 rounded-2xl p-6 mb-6 flex items-center justify-between overflow-hidden relative">
-                <div className="absolute -top-8 -right-8 w-40 h-40 bg-white/10 rounded-full" />
-                <div className="absolute -bottom-10 right-24 w-28 h-28 bg-white/10 rounded-full" />
+            /* ══════════════ ADMIN OVERVIEW ══════════════ */
+            <div className="p-6 space-y-6">
+              {/* ── Hero banner ─────────────────────────────── */}
+              <div className="bg-gradient-to-r from-green-900 via-green-800 to-green-700 rounded-2xl p-6 flex items-center justify-between overflow-hidden relative">
+                <div className="absolute -top-8 -right-8 w-44 h-44 bg-white/10 rounded-full pointer-events-none" />
+                <div className="absolute -bottom-10 right-28 w-32 h-32 bg-white/10 rounded-full pointer-events-none" />
                 <div className="relative">
-                  <p className="text-green-200 text-sm font-medium mb-1">
-                    Admin Portal
+                  <p className="text-green-300 text-sm font-medium mb-1">
+                    Admin Portal 🛡️
                   </p>
                   <h2 className="text-white text-2xl font-extrabold leading-tight">
                     Welcome, {user?.name}
                   </h2>
-                  <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-300">
-                    <FiShield className="text-xs" /> Administrator
+                  <p className="text-green-300 text-xs mt-1">{user?.email}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-300">
+                      <FiShield className="text-xs" /> Administrator
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/20 text-green-100">
+                      <FiClock className="text-xs" />
+                      Since{" "}
+                      {user?.createdAt
+                        ? new Date(user.createdAt).toLocaleDateString(
+                            undefined,
+                            { month: "short", year: "numeric" },
+                          )
+                        : "—"}
+                    </span>
                   </div>
                 </div>
-                <div className="relative hidden sm:flex w-16 h-16 bg-white/20 rounded-2xl items-center justify-center text-4xl flex-shrink-0">
-                  🛡️
+                <div className="relative hidden sm:flex w-20 h-20 bg-white/20 rounded-2xl items-center justify-center text-white font-extrabold text-3xl flex-shrink-0 ring-2 ring-white/20">
+                  {user?.name?.[0]?.toUpperCase() ?? "A"}
                 </div>
               </div>
 
-              {/* Quick nav cards */}
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-                Admin Modules
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                {[
-                  {
-                    icon: FiShoppingBag,
-                    title: "Merchandise",
-                    desc: "Add, edit, approve & publish items",
-                    id: "merchandise",
-                    color: "bg-purple-50 text-purple-600",
-                    border: "hover:border-purple-200",
-                  },
-                  {
-                    icon: FiCalendar,
-                    title: "Events",
-                    desc: "Manage & approve campus events",
-                    id: "events",
-                    color: "bg-blue-50 text-blue-600",
-                    border: "hover:border-blue-200",
-                  },
-                  {
-                    icon: FiUsers,
-                    title: "Users",
-                    desc: "Manage roles & user accounts",
-                    id: "users",
-                    color: "bg-amber-50 text-amber-600",
-                    border: "hover:border-amber-200",
-                  },
-                  {
-                    icon: FiDollarSign,
-                    title: "Sponsors",
-                    desc: "Sponsor matching & outreach",
-                    id: "sponsors",
-                    color: "bg-green-50 text-green-700",
-                    border: "hover:border-green-200",
-                  },
-                ].map(({ icon: Icon, title, desc, id, color, border }) => (
-                  <button
-                    key={id}
-                    onClick={() => setActive(id)}
-                    className={`text-left bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md ${border} hover:border transition-all duration-200 group`}
-                  >
-                    <div
-                      className={`inline-flex items-center justify-center w-11 h-11 rounded-xl mb-4 text-xl ${color}`}
-                    >
-                      <Icon />
+              {overviewLoading ? (
+                <div className="flex items-center justify-center py-16 text-gray-400 gap-3">
+                  <span className="w-6 h-6 border-2 border-gray-200 border-t-green-700 rounded-full animate-spin" />
+                  Loading overview…
+                </div>
+              ) : (
+                <>
+                  {/* ── Pending OC alert ────────────────────── */}
+                  {(() => {
+                    const pending = (overviewData?.ocApps ?? []).filter(
+                      (a) => a.status === "pending",
+                    );
+                    return pending.length > 0 ? (
+                      <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3 flex items-center gap-3">
+                        <FiAlertCircle className="text-amber-500 text-xl flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-amber-800">
+                            {pending.length} OC application
+                            {pending.length > 1 ? "s" : ""} awaiting review
+                          </p>
+                          <p className="text-xs text-amber-600 mt-0.5">
+                            Review and accept or reject pending applicants.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setActive("oc-apps")}
+                          className="text-xs font-semibold text-amber-700 hover:text-amber-900 underline flex-shrink-0"
+                        >
+                          Review now
+                        </button>
+                      </div>
+                    ) : null;
+                  })()}
+
+                  {/* ── Stats row ───────────────────────────── */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {[
+                      {
+                        label: "Total Users",
+                        value: overviewData?.users?.length ?? 0,
+                        sub: `${(overviewData?.users ?? []).filter((u) => u.role === "participant").length} participants`,
+                        icon: FiUsers,
+                        color: "text-blue-600 bg-blue-50",
+                        id: "users",
+                      },
+                      {
+                        label: "Merchandise",
+                        value: overviewData?.merch?.length ?? 0,
+                        sub: `${(overviewData?.merch ?? []).filter((m) => m.isPublished).length} published`,
+                        icon: FiShoppingBag,
+                        color: "text-purple-600 bg-purple-50",
+                        id: "merchandise",
+                      },
+                      {
+                        label: "Events",
+                        value: overviewData?.events?.length ?? 0,
+                        sub: `${(overviewData?.events ?? []).filter((e) => e.isPublished ?? true).length} active`,
+                        icon: FiCalendar,
+                        color: "text-amber-600 bg-amber-50",
+                        id: "events",
+                      },
+                      {
+                        label: "OC Applications",
+                        value: overviewData?.ocApps?.length ?? 0,
+                        sub: `${(overviewData?.ocApps ?? []).filter((a) => a.status === "pending").length} pending`,
+                        icon: FiAward,
+                        color: "text-green-700 bg-green-50",
+                        id: "oc-apps",
+                      },
+                    ].map(({ label, value, sub, icon: Icon, color, id }) => (
+                      <button
+                        key={id}
+                        onClick={() => setActive(id)}
+                        className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition text-left group"
+                      >
+                        <div
+                          className={`inline-flex items-center justify-center w-10 h-10 rounded-xl mb-3 text-lg ${color}`}
+                        >
+                          <Icon />
+                        </div>
+                        <p className="text-2xl font-extrabold text-gray-900">
+                          {value}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
+                        <p className="text-xs font-semibold text-gray-500 mt-1 flex items-center gap-1">
+                          {label}{" "}
+                          <FiArrowRight className="text-[10px] opacity-0 group-hover:opacity-100 transition" />
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* ── Two-column: User breakdown + OC Applications ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                    {/* User role breakdown */}
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <p className="text-sm font-bold text-gray-900">
+                          User Breakdown
+                        </p>
+                        <button
+                          onClick={() => setActive("users")}
+                          className="text-xs font-semibold text-green-700 hover:text-green-900 flex items-center gap-1"
+                        >
+                          Manage <FiArrowRight className="text-xs" />
+                        </button>
+                      </div>
+                      <div className="space-y-3">
+                        {[
+                          {
+                            role: "participant",
+                            label: "Participants",
+                            color: "bg-blue-400",
+                            textColor: "text-blue-700",
+                            bg: "bg-blue-50",
+                          },
+                          {
+                            role: "oc",
+                            label: "OC Members",
+                            color: "bg-amber-400",
+                            textColor: "text-amber-700",
+                            bg: "bg-amber-50",
+                          },
+                          {
+                            role: "admin",
+                            label: "Admins",
+                            color: "bg-red-400",
+                            textColor: "text-red-700",
+                            bg: "bg-red-50",
+                          },
+                        ].map(({ role, label, color, textColor, bg }) => {
+                          const count = (overviewData?.users ?? []).filter(
+                            (u) => u.role === role,
+                          ).length;
+                          const total = (overviewData?.users ?? []).length || 1;
+                          const pct = Math.round((count / total) * 100);
+                          return (
+                            <div key={role}>
+                              <div className="flex items-center justify-between mb-1">
+                                <span
+                                  className={`text-xs font-semibold px-2 py-0.5 rounded-full ${bg} ${textColor}`}
+                                >
+                                  {label}
+                                </span>
+                                <span className="text-xs font-bold text-gray-500">
+                                  {count}{" "}
+                                  <span className="font-normal text-gray-400">
+                                    ({pct}%)
+                                  </span>
+                                </span>
+                              </div>
+                              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${color} transition-all duration-500`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-5 pt-4 border-t border-gray-100 grid grid-cols-3 gap-3">
+                        {[
+                          {
+                            label: "Total Users",
+                            value: overviewData?.users?.length ?? 0,
+                            icon: FiUsers,
+                            color: "text-blue-600",
+                          },
+                          {
+                            label: "OC Members",
+                            value: (overviewData?.users ?? []).filter(
+                              (u) => u.role === "oc",
+                            ).length,
+                            icon: FiAward,
+                            color: "text-amber-600",
+                          },
+                          {
+                            label: "Admins",
+                            value: (overviewData?.users ?? []).filter(
+                              (u) => u.role === "admin",
+                            ).length,
+                            icon: FiShield,
+                            color: "text-red-600",
+                          },
+                        ].map(({ label, value, icon: Icon, color }) => (
+                          <div key={label} className="text-center py-2">
+                            <Icon className={`text-lg mx-auto mb-1 ${color}`} />
+                            <p className="text-base font-extrabold text-gray-900">
+                              {value}
+                            </p>
+                            <p className="text-[10px] text-gray-400 font-medium">
+                              {label}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <p className="font-bold text-gray-900 text-sm mb-1">
-                      {title}
+
+                    {/* OC Applications summary */}
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <p className="text-sm font-bold text-gray-900">
+                          OC Applications
+                        </p>
+                        <button
+                          onClick={() => setActive("oc-apps")}
+                          className="text-xs font-semibold text-green-700 hover:text-green-900 flex items-center gap-1"
+                        >
+                          Review all <FiArrowRight className="text-xs" />
+                        </button>
+                      </div>
+
+                      {/* Status pills */}
+                      <div className="grid grid-cols-3 gap-3 mb-5">
+                        {[
+                          {
+                            status: "pending",
+                            label: "Pending",
+                            cls: "bg-amber-50 text-amber-700 border-amber-200",
+                            dot: "bg-amber-400",
+                          },
+                          {
+                            status: "accepted",
+                            label: "Accepted",
+                            cls: "bg-green-50 text-green-700 border-green-200",
+                            dot: "bg-green-500",
+                          },
+                          {
+                            status: "rejected",
+                            label: "Rejected",
+                            cls: "bg-red-50   text-red-600   border-red-200",
+                            dot: "bg-red-400",
+                          },
+                        ].map(({ status, label, cls, dot }) => {
+                          const count = (overviewData?.ocApps ?? []).filter(
+                            (a) => a.status === status,
+                          ).length;
+                          return (
+                            <div
+                              key={status}
+                              className={`rounded-xl border p-3 text-center ${cls}`}
+                            >
+                              <div
+                                className={`w-2.5 h-2.5 rounded-full mx-auto mb-1.5 ${dot}`}
+                              />
+                              <p className="text-xl font-extrabold">{count}</p>
+                              <p className="text-[10px] font-semibold mt-0.5">
+                                {label}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Top scored recent apps */}
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
+                        Top Applicants
+                      </p>
+                      {(overviewData?.ocApps ?? []).length === 0 ? (
+                        <div className="text-center py-6 text-gray-400">
+                          <FiAward className="text-3xl mx-auto mb-1 opacity-30" />
+                          <p className="text-xs">No applications yet</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {[...(overviewData?.ocApps ?? [])]
+                            .sort((a, b) => b.score - a.score)
+                            .slice(0, 3)
+                            .map((app, idx) => {
+                              const statusCfg = {
+                                pending: {
+                                  cls: "text-amber-600 bg-amber-50 border-amber-200",
+                                  label: "Pending",
+                                },
+                                accepted: {
+                                  cls: "text-green-700 bg-green-50 border-green-200",
+                                  label: "Accepted",
+                                },
+                                rejected: {
+                                  cls: "text-red-600   bg-red-50   border-red-200",
+                                  label: "Rejected",
+                                },
+                              }[app.status] ?? {
+                                cls: "text-gray-500 bg-gray-50 border-gray-200",
+                                label: app.status,
+                              };
+                              return (
+                                <div
+                                  key={app._id}
+                                  className="flex items-center gap-3 p-2.5 rounded-xl border border-gray-100 bg-gray-50/50"
+                                >
+                                  <div
+                                    className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-extrabold flex-shrink-0 ${
+                                      idx === 0
+                                        ? "bg-amber-100 text-amber-700"
+                                        : "bg-gray-200 text-gray-600"
+                                    }`}
+                                  >
+                                    {idx + 1}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-gray-900 line-clamp-1">
+                                      {app.student?.name ?? "Unknown"}
+                                    </p>
+                                    <p className="text-[11px] text-gray-400 line-clamp-1">
+                                      {app.eventName}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    {app.score >= 60 && (
+                                      <FiStar className="text-amber-400 text-xs" />
+                                    )}
+                                    <span className="text-[11px] font-bold text-gray-500">
+                                      {app.score}pts
+                                    </span>
+                                    <span
+                                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusCfg.cls}`}
+                                    >
+                                      {statusCfg.label}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Quick access module cards ────────────── */}
+                  <div>
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">
+                      Admin Modules
                     </p>
-                    <p className="text-xs text-gray-400 leading-relaxed">
-                      {desc}
-                    </p>
-                  </button>
-                ))}
-              </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+                      {[
+                        {
+                          icon: FiShoppingBag,
+                          label: "Merchandise",
+                          id: "merchandise",
+                          color: "text-purple-600 bg-purple-50",
+                          border: "hover:border-purple-200",
+                        },
+                        {
+                          icon: FiPackage,
+                          label: "Collection Slots",
+                          id: "slots",
+                          color: "text-indigo-600 bg-indigo-50",
+                          border: "hover:border-indigo-200",
+                        },
+                        {
+                          icon: FiCalendar,
+                          label: "Events",
+                          id: "events",
+                          color: "text-blue-600 bg-blue-50",
+                          border: "hover:border-blue-200",
+                        },
+                        {
+                          icon: FiUsers,
+                          label: "Users",
+                          id: "users",
+                          color: "text-amber-600 bg-amber-50",
+                          border: "hover:border-amber-200",
+                        },
+                        {
+                          icon: FiDollarSign,
+                          label: "Sponsors",
+                          id: "sponsors",
+                          color: "text-green-700 bg-green-50",
+                          border: "hover:border-green-200",
+                        },
+                        {
+                          icon: FiAward,
+                          label: "OC Applications",
+                          id: "oc-apps",
+                          color: "text-rose-600 bg-rose-50",
+                          border: "hover:border-rose-200",
+                        },
+                      ].map(({ icon: Icon, label, id, color, border }) => (
+                        <button
+                          key={id}
+                          onClick={() => setActive(id)}
+                          className={`text-left bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:shadow-md ${border} hover:border transition-all duration-200 group`}
+                        >
+                          <div
+                            className={`inline-flex items-center justify-center w-10 h-10 rounded-xl mb-3 text-lg ${color}`}
+                          >
+                            <Icon />
+                          </div>
+                          <p className="text-xs font-bold text-gray-900 leading-snug">
+                            {label}
+                          </p>
+                          <FiArrowRight className="text-[10px] text-gray-300 mt-1.5 group-hover:text-green-700 transition" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </main>

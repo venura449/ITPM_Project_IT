@@ -35,4 +35,19 @@ const allOrders = async (req, res) => {
     } catch (err) { res.status(400).json({ message: err.message }); }
 };
 
-module.exports = { purchase, myOrders, myUncollectedCount, markCollected, allOrders };
+const assignTimeSlots = async (req, res) => {
+    try {
+        const orders = await OrderService.assignTimeSlots(req.body);
+        res.json(orders);
+    } catch (err) { res.status(400).json({ message: err.message }); }
+};
+
+const slotOrders = async (req, res) => {
+    try {
+        const { merchandiseId } = req.query;
+        const orders = await OrderService.slotOrders(merchandiseId);
+        res.json(orders);
+    } catch (err) { res.status(400).json({ message: err.message }); }
+};
+
+module.exports = { purchase, myOrders, myUncollectedCount, markCollected, allOrders, assignTimeSlots, slotOrders };

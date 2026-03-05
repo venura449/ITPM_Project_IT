@@ -21,5 +21,7 @@ router.get('/me/invitations', protect, restrictTo('sponsor'), ctrl.getMyInvitati
 router.put('/me/invitations/:id/respond', protect, restrictTo('sponsor'), ctrl.respondInvitation);
 router.post('/me/donate', protect, restrictTo('sponsor'), ctrl.donate);
 router.get('/me/donations', protect, restrictTo('sponsor'), ctrl.getMyDonations);
+router.post('/me/self-invite/:eventId', protect, restrictTo('sponsor'), ctrl.selfInvite);
+router.get('/me/event-totals', protect, restrictTo('sponsor'), ctrl.getEventTotals);
 
 module.exports = router;

@@ -10,6 +10,7 @@ const orderSchema = new mongoose.Schema(
         paymentStatus: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
         paymentReference: { type: String, default: '' },
         collected: { type: Boolean, default: false },
+        timeSlot: { type: Date, default: null },
     },
     { timestamps: true }
 );

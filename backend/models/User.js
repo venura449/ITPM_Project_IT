@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema(
         email: { type: String, required: true, unique: true, lowercase: true, trim: true },
         password: { type: String, required: true },
         role: { type: String, enum: ['participant', 'oc', 'admin', 'sponsor'], default: 'participant' },
+        loginStreak: { type: Number, default: 0 },
+        lastLoginDate: { type: String, default: '' }, // stored as YYYY-MM-DD
     },
     { timestamps: true }
 );

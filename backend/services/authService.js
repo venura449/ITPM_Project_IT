@@ -9,6 +9,7 @@ const safeUser = (user) => ({
     name: user.name,
     email: user.email,
     role: user.role,
+    createdAt: user.createdAt,
 });
 
 const register = async ({ name, email, password }) => {
@@ -24,6 +25,20 @@ const login = async ({ email, password }) => {
     const user = await User.findOne({ email });
     if (!user || !(await user.matchPassword(password)))
         throw new Error('Invalid email or password');
+
+    // ── Login-streak tracking ────────────────────────────
+    const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    if (user.lastLoginDate !== todayStr) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().slice(0, 10);
+        user.loginStreak = user.lastLoginDate === yesterdayStr
+            ? (user.loginStreak || 0) + 1
+            : 1;
+        user.lastLoginDate = todayStr;
+        await user.save();
+    }
+
     return { user: safeUser(user), token: generateToken(user._id) };
 };
 

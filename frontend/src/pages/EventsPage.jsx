@@ -14,6 +14,7 @@ import {
   FiChevronLeft,
   FiUsers,
   FiBookmark,
+  FiAward,
 } from "react-icons/fi";
 import { useAuth } from "../context/AuthContext";
 import api from "../api/axios";
@@ -79,6 +80,8 @@ function EventCard({
   onUnregister,
   isRegistered,
   registering,
+  votingCtx,
+  onVote,
 }) {
   const d = new Date(event.date);
   const dateStr = d.toLocaleDateString("en-GB", {
@@ -128,7 +131,7 @@ function EventCard({
         <p className="text-xs text-gray-500 leading-relaxed line-clamp-2 mb-3">
           {event.description}
         </p>
-        <div className="space-y-1 mb-4">
+        <div className="space-y-1 mb-3">
           <div className="flex items-center gap-1.5 text-xs text-gray-400">
             <FiClock className="flex-shrink-0" /> {dateStr} at {timeStr}
           </div>
@@ -136,7 +139,56 @@ function EventCard({
             <FiMapPin className="flex-shrink-0" /> {event.location}
           </div>
         </div>
-        <div className="mt-auto">
+        {event.budgetGoal > 0 && (
+          <div className="mb-3 bg-gray-50 rounded-xl p-2.5">
+            <div className="flex justify-between items-center text-[10px] font-bold mb-1.5">
+              <span className="text-gray-500">Sponsor Funding</span>
+              <span
+                className={`${Math.min(100, Math.round(((event.totalRaised || 0) / event.budgetGoal) * 100)) >= 100 ? "text-green-600" : "text-green-700"}`}
+              >
+                {Math.min(
+                  100,
+                  Math.round(
+                    ((event.totalRaised || 0) / event.budgetGoal) * 100,
+                  ),
+                )}
+                %
+              </span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-gray-200 overflow-hidden">
+              <div
+                className="h-2 rounded-full bg-gradient-to-r from-green-700 to-green-500 transition-all duration-500"
+                style={{
+                  width: `${Math.min(100, Math.round(((event.totalRaised || 0) / event.budgetGoal) * 100))}%`,
+                }}
+              />
+            </div>
+            <div className="flex justify-between text-[9px] text-gray-400 mt-1 font-medium">
+              <span>
+                Rs. {(event.totalRaised || 0).toLocaleString()} raised
+              </span>
+              <span>Goal: Rs. {event.budgetGoal.toLocaleString()}</span>
+            </div>
+            {event.sponsors?.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-gray-200">
+                {event.sponsors.slice(0, 2).map((sp) => (
+                  <span
+                    key={sp.company}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white text-green-700 text-[9px] font-bold border border-green-200"
+                  >
+                    🤝 {sp.company} · {sp.percentage}%
+                  </span>
+                ))}
+                {event.sponsors.length > 2 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-white text-gray-400 text-[9px] font-bold border border-gray-200">
+                    +{event.sponsors.length - 2} more
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        <div className="mt-auto space-y-2">
           {isRegistered ? (
             <button
               onClick={() => onUnregister(event)}
@@ -164,6 +216,30 @@ function EventCard({
               Register
             </button>
           )}
+          {votingCtx?.status === "open" && (
+            <button
+              onClick={() => onVote(event)}
+              className={`w-full py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                votingCtx.myVote !== null && votingCtx.myVote !== undefined
+                  ? "bg-indigo-50 border border-indigo-200 text-indigo-700 cursor-default"
+                  : "bg-indigo-700 hover:bg-indigo-600 text-white shadow-sm"
+              }`}
+            >
+              <FiAward className="text-sm" />
+              {votingCtx.myVote !== null && votingCtx.myVote !== undefined
+                ? `Voted \u2714 #${votingCtx.myVote}`
+                : "Cast Vote"}
+            </button>
+          )}
+          {votingCtx?.status === "closed" && (
+            <div className="w-full py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 text-xs font-semibold flex items-center justify-center gap-1.5">
+              <FiAward className="text-sm" />
+              Voting Closed
+              {votingCtx.myVote !== null &&
+                votingCtx.myVote !== undefined &&
+                ` — You voted #${votingCtx.myVote}`}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -186,6 +262,10 @@ export default function EventsPage() {
   const [pendingEvents, setPendingEvents] = useState([]);
   const [ocTab, setOcTab] = useState("published"); // published | pending
 
+  // Voting
+  const [votingContexts, setVotingContexts] = useState({});
+  const [voteTarget, setVoteTarget] = useState(null);
+
   // Add Event Modal
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -204,6 +284,17 @@ export default function EventsPage() {
       ]);
       setEvents(evRes.data);
       setMyRegs(regRes.data.map((r) => r.event._id));
+      // Non-blocking: voting contexts
+      api
+        .get("/voting/contexts")
+        .then((r) => {
+          const map = {};
+          r.data.forEach((c) => {
+            map[c.eventId] = c;
+          });
+          setVotingContexts(map);
+        })
+        .catch(() => {});
     } catch (_) {
     } finally {
       setLoading(false);
@@ -256,6 +347,18 @@ export default function EventsPage() {
     } finally {
       setRegistering((s) => ({ ...s, [ev._id]: false }));
     }
+  };
+
+  // ── Voting ───────────────────────────────────────────────────
+  const openVoteModal = (ev) => setVoteTarget(ev);
+
+  const handleCastVote = async (eventId, contestantNumber) => {
+    await api.post(`/voting/${eventId}/vote`, { contestantNumber });
+    setVotingContexts((prev) => ({
+      ...prev,
+      [eventId]: { ...prev[eventId], myVote: contestantNumber },
+    }));
+    setVoteTarget(null);
   };
 
   // ── Add event modal ──────────────────────────────────────
@@ -530,6 +633,8 @@ export default function EventsPage() {
                     onUnregister={handleUnregister}
                     onRegister={handleRegister}
                     registering={!!registering[ev._id]}
+                    votingCtx={votingContexts[ev._id]}
+                    onVote={openVoteModal}
                   />
                 ))}
               </div>
@@ -548,12 +653,22 @@ export default function EventsPage() {
                   isRegistered={myRegs.includes(ev._id)}
                   onRegister={handleRegister}
                   onUnregister={handleUnregister}
-                  registering={!!registering[ev._id]}
-                />
+                  registering={!!registering[ev._id]}                  votingCtx={votingContexts[ev._id]}
+                  onVote={openVoteModal}                />
               ))}
             </div>
           )}
         </>
+      )}
+
+      {/* ── Vote Modal ── */}
+      {voteTarget && (
+        <VoteModal
+          event={voteTarget}
+          votingCtx={votingContexts[voteTarget._id]}
+          onCastVote={handleCastVote}
+          onClose={() => setVoteTarget(null)}
+        />
       )}
 
       {/* ── Add Event Modal ── */}
@@ -811,5 +926,117 @@ function ErrorMsg({ msg }) {
     <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3.5 py-2.5 border border-red-100">
       {msg}
     </p>
+  );
+}
+
+// ── Vote Modal ─────────────────────────────────────────────────────────────
+function VoteModal({ event, votingCtx, onCastVote, onClose }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSelect = async (contestantNumber) => {
+    if (loading) return;
+    setError("");
+    setLoading(true);
+    try {
+      await onCastVote(event._id, contestantNumber);
+    } catch (err) {
+      setError(err.response?.data?.message ?? "Failed to submit vote.");
+      setLoading(false);
+    }
+  };
+
+  const alreadyVoted =
+    votingCtx?.myVote !== null && votingCtx?.myVote !== undefined;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4 backdrop-blur-sm"
+      style={{ background: "rgba(0,0,0,0.45)" }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="bg-gradient-to-r from-indigo-900 to-indigo-700 px-6 py-4 flex items-center justify-between">
+          <div>
+            <p className="text-white font-bold text-sm">Cast Your Vote</p>
+            <p className="text-indigo-300 text-xs mt-0.5 truncate max-w-[220px]">
+              {event.title}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-white/10 transition"
+          >
+            <FiX />
+          </button>
+        </div>
+
+        <div className="px-5 py-5">
+          {alreadyVoted ? (
+            <div className="text-center py-3">
+              <div className="w-14 h-14 rounded-2xl bg-indigo-100 flex items-center justify-center mx-auto mb-3">
+                <FiCheck className="text-2xl text-indigo-700" />
+              </div>
+              <p className="text-sm font-bold text-gray-800">
+                You&apos;ve already voted!
+              </p>
+              {(() => {
+                const voted = votingCtx.contestants?.find(
+                  (c) => c.number === votingCtx.myVote,
+                );
+                return voted ? (
+                  <p className="text-xs text-gray-500 mt-1.5">
+                    Your choice:{" "}
+                    <span className="font-bold text-indigo-700">
+                      #{voted.number} — {voted.name}
+                    </span>
+                  </p>
+                ) : null;
+              })()}
+              <button
+                onClick={onClose}
+                className="mt-4 px-6 py-2 rounded-xl bg-gray-100 text-gray-600 text-sm font-semibold hover:bg-gray-200 transition"
+              >
+                Close
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-gray-400 text-center mb-4">
+                Tap a contestant to cast your vote. You can only vote once.
+              </p>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {(votingCtx?.contestants || []).map((c) => (
+                  <button
+                    key={c.number}
+                    onClick={() => handleSelect(c.number)}
+                    disabled={loading}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-indigo-300 hover:bg-indigo-50 transition text-left group disabled:opacity-60"
+                  >
+                    <span className="w-10 h-10 rounded-xl bg-indigo-100 group-hover:bg-indigo-200 flex items-center justify-center text-sm font-extrabold text-indigo-700 flex-shrink-0 transition">
+                      #{c.number}
+                    </span>
+                    <span className="flex-1 text-sm font-semibold text-gray-800">
+                      {c.name}
+                    </span>
+                    {loading && (
+                      <span className="w-4 h-4 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+                    )}
+                  </button>
+                ))}
+              </div>
+              {error && (
+                <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3.5 py-2.5 border border-red-100 mt-3">
+                  {error}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
