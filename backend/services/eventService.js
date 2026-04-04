@@ -3,6 +3,8 @@ const EventRegistration = require('../models/EventRegistration');
 const Donation = require('../models/Donation');
 const Sponsor = require('../models/Sponsor');
 const SponsorInvitation = require('../models/SponsorInvitation');
+const User = require('../models/User');
+const { sendEventPublishedEmails } = require('./emailService');
 
 const REQUIRED_FIELDS = ['title', 'description', 'date', 'location', 'faculty', 'category'];
 
@@ -71,6 +73,14 @@ const publish = async (adminId, id) => {
     if (ev.status !== 'approved') throw new Error('Event must be approved before publishing');
     ev.status = 'published';
     await ev.save();
+    // Send email notifications to all users
+    try {
+        const users = await User.find({}, 'email').lean();
+        const emails = users.map(u => u.email).filter(Boolean);
+        await sendEventPublishedEmails(emails, ev);
+    } catch (emailErr) {
+        console.error('Failed to send event published emails:', emailErr.message);
+    }
     // Auto-invite all sponsors whose categories include this event's category
     if (ev.budgetGoal > 0 && ev.category) {
         const sponsors = await Sponsor.find({ categories: ev.category }).lean();
